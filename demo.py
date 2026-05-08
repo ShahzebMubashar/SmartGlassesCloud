@@ -47,7 +47,8 @@ demo = gr.Interface(
         streaming=True,
         type="numpy"
     ),
-    outputs=gr.Audio(autoplay=True),               
+    outputs=gr.Audio(autoplay=True),
     title="BlindAid - Object Detection",
     live=True
 )
+  

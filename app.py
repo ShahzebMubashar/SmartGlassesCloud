@@ -1,3 +1,3 @@
 from demo import demo
 
-demo.launch(show_error=True)
+demo.launch(show_error=True,debug=True)
