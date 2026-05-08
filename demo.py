@@ -23,12 +23,12 @@ def main(frame):
 
     results = model(frame)
     detected = set()
-
+# Inside demo.py on Hugging Face
     for result in results:
-        for box in result.boxes:
-            class_id = int(box.cls[0])
-            label = model.names[class_id]
-            confidence = float(box.conf[0])
+     for box in result.boxes:
+        label = model.names[int(box.cls[0])]
+        conf = float(box.conf[0])
+        print(f"Detected: {label} with {conf} confidence") # <-- Add this debug line
 
             if confidence >= THRESHOLD:
                 detected.add(label)
