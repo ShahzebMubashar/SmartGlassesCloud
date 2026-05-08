@@ -6,53 +6,75 @@ import os
 import numpy as np
 import cv2
 
+# Load model
 model = YOLO('best_v3.pt')
 THRESHOLD = 0.5
 last_spoken = set()
 
 def main(frame):
     global last_spoken
-
+    
     if frame is None:
-        return None
+        return None, None
 
-    # ── handle both filepath and numpy array ────────────────────
-    if isinstance(frame, str):                  # ← if filepath received
-        frame = cv2.imread(frame)               # ← read it as numpy array
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    try:
+        # ── Step 1: Image Processing ────────────────────
+        # Gradio sends a filepath string when type="filepath"
+        if isinstance(frame, str):                  
+            frame = cv2.imread(frame)               
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    results = model(frame)
-    detected = set()
-# Inside demo.py on Hugging Face
-    for result in results:
-     for box in result.boxes:
-        label = model.names[int(box.cls[0])]
-        conf = float(box.conf[0])
-        print(f"Detected: {label} with {conf} confidence") # <-- Add this debug line
+        # ── Step 2: Model Inference ─────────────────────
+        results = model(frame)
+        detected = set()
 
-        if confidence >= THRESHOLD:
-                detected.add(label)
+        for result in results:
+            for box in result.boxes:
+                label = model.names[int(box.cls[0])]
+                conf = float(box.conf[0])
+                
+                # Debug print for HF logs
+                print(f"Detected: {label} ({conf:.2f})")
 
-    if not detected or detected == last_spoken:
-        return None
+                if conf >= THRESHOLD:
+                    detected.add(label)
 
-    last_spoken = detected
+        # ── Step 3: Filtering logic ──────────────────────
+        if not detected:
+            print("ℹ️ Nothing detected above threshold.")
+            return None, None 
 
-    text = ", ".join(detected)
+        if detected == last_spoken:
+            # Important: still return None to keep test.py silent
+            return None, None 
 
-    tts = gTTS(text=text, lang='en')
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-        output_path = f.name
-    tts.save(output_path)
+        last_spoken = detected
+        text = ", ".join(detected)
 
-    return output_path
+        # ── Step 4: TTS Generation ───────────────────────
+        tts = gTTS(text=text, lang='en')
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            output_path = f.name
+        tts.save(output_path)
+        
+        print(f"✅ Success: Sending audio and text: {text}")
+        return output_path, text 
 
+    except Exception as e:
+        print(f"🔥 Server Error: {e}")
+        return None, None
+
+# Interface Setup
 demo = gr.Interface(
     fn=main,
-    inputs=gr.Image(
-        type="filepath", 
-        label="Input Image"
-    ),
-    outputs=gr.Audio(autoplay=True),
+    inputs=gr.Image(type="filepath"),
+    outputs=[
+        gr.Audio(label="Voice Alert"),    # Output 1 (result[0])
+        gr.Textbox(label="Detected Text") # Output 2 (result[1])
+    ],
     title="BlindAid - Object Detection"
 )
+
+# This is required for app.py to work
+if __name__ == "__main__":
+    demo.launch()
