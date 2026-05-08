@@ -30,7 +30,7 @@ def main(frame):
         conf = float(box.conf[0])
         print(f"Detected: {label} with {conf} confidence") # <-- Add this debug line
 
-            if confidence >= THRESHOLD:
+        if confidence >= THRESHOLD:
                 detected.add(label)
 
     if not detected or detected == last_spoken:
