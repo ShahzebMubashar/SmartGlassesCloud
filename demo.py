@@ -50,11 +50,9 @@ def main(frame):
 demo = gr.Interface(
     fn=main,
     inputs=gr.Image(
-        sources="webcam",
-        streaming=True,
-        type="filepath"         # ← changed from "numpy" to "filepath"
+        type="filepath", 
+        label="Input Image"
     ),
     outputs=gr.Audio(autoplay=True),
-    title="BlindAid - Object Detection",
-    live=True
+    title="BlindAid - Object Detection"
 )
