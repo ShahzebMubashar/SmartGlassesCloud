@@ -1,25 +1,22 @@
 from ultralytics import YOLO
 import gradio as gr
-from gtts import gTTS
-import tempfile
 import os
 import numpy as np
 import cv2
 
 # Load model
 model = YOLO('best_v3.pt')
-THRESHOLD = 0.1
-last_spoken = set()
+THRESHOLD = 0.2  # Set back to 0.5 for stability, or keep 0.1 for testing
+last_spoken = ""
 
 def main(frame):
     global last_spoken
     
     if frame is None:
-        return None, None
+        return ""
 
     try:
         # ── Step 1: Image Processing ────────────────────
-        # Gradio sends a filepath string when type="filepath"
         if isinstance(frame, str):                  
             frame = cv2.imread(frame)               
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -33,48 +30,34 @@ def main(frame):
                 label = model.names[int(box.cls[0])]
                 conf = float(box.conf[0])
                 
-                # Debug print for HF logs
-                print(f"Detected: {label} ({conf:.2f})")
-
                 if conf >= THRESHOLD:
                     detected.add(label)
 
         # ── Step 3: Filtering logic ──────────────────────
         if not detected:
-            print("ℹ️ Nothing detected above threshold.")
-            return None, None 
+            return "" 
 
-        if detected == last_spoken:
-            # Important: still return None to keep test.py silent
-            return None, None 
+        text = ", ".join(sorted(detected))
 
-        last_spoken = detected
-        text = ", ".join(detected)
+        # Only return text if the list of objects has changed
+        if text == last_spoken:
+            return "" 
 
-        # ── Step 4: TTS Generation ───────────────────────
-        tts = gTTS(text=text, lang='en')
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            output_path = f.name
-        tts.save(output_path)
-        
-        print(f"✅ Success: Sending audio and text: {text}")
-        return output_path, text 
+        last_spoken = text
+        print(f"✅ Success: Sending text to local: {text}")
+        return text 
 
     except Exception as e:
         print(f"🔥 Server Error: {e}")
-        return None, None
+        return ""
 
-# Interface Setup
+# Interface Setup (Single Output: Textbox)
 demo = gr.Interface(
     fn=main,
     inputs=gr.Image(type="filepath"),
-    outputs=[
-        gr.Audio(label="Voice Alert"),    # Output 1 (result[0])
-        gr.Textbox(label="Detected Text") # Output 2 (result[1])
-    ],
-    title="BlindAid - Object Detection"
+    outputs=gr.Textbox(label="Detected Text"),
+    title="BlindAid - Text-only API"
 )
 
-# This is required for app.py to work
 if __name__ == "__main__":
     demo.launch()
