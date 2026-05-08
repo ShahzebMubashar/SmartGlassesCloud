@@ -8,7 +8,7 @@ import cv2
 
 # Load model
 model = YOLO('best_v3.pt')
-THRESHOLD = 0.5
+THRESHOLD = 0.1
 last_spoken = set()
 
 def main(frame):
