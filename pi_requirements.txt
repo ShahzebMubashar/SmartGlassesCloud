@@ -1,0 +1,11 @@
+sudo apt-get update
+sudo apt-get install -y espeak tesseract-ocr
+
+pip install pyttsx3 gradio_client
+pip uninstall -y opencv-python
+pip install opencv-python-headless
+
+Mode Switching Tip:
+Since this Pi code is "Headless" (no window to press keys like 'o'), you can set 
+current_mode = "OCR (Read Text)" and restart the script if you want it to 
+focus solely on reading documents or signs.
