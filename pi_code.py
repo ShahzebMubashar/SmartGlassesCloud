@@ -66,13 +66,19 @@ def run_detector():
 
     print(f"🚀 Pi BlindAid Active in {current_mode} mode.")
     print("Hold an object to hear distance, or trigger OCR via API if needed.")
+    print("(No camera window — headless mode. First API call can take several minutes.)\n")
 
     try:
+        first_frame = True
         while True:
             ret, frame = cap.read()
             if not ret:
                 time.sleep(1)
                 continue
+
+            if first_frame:
+                print("✅ Camera is delivering frames.", flush=True)
+                first_frame = False
 
             # Save frame to temp file with compression to save bandwidth
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
@@ -82,11 +88,15 @@ def run_detector():
             try:
                 # Call Hugging Face API with the current mode
                 # Result[1] contains the string we want to speak
+                print("📤 Sending frame to Hugging Face…", flush=True)
+                t0 = time.monotonic()
                 result = client.predict(
                     frame=handle_file(temp_path),
                     mode=current_mode,
                     api_name="/main"
                 )
+                dt = time.monotonic() - t0
+                print(f"📥 Reply in {dt:.1f}s", flush=True)
 
                 if result and len(result) > 1:
                     status_text = result[1]
