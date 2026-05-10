@@ -8,9 +8,12 @@ from gradio_client import Client, handle_file
 
 # --- CONFIGURATION ---
 HF_SPACE_URL = "aliyanFYP/fyp"
-CAMERA_INDEX = 0 
+# Pi Camera via libcamera usually exposes V4L2 as index 0 or 10 — script tries 0..2.
+CAMERA_INDICES = (0, 1, 2)
 # 3 seconds is ideal for Pi 3 to maintain stability
-DELAY_BETWEEN_CALLS = 3 
+DELAY_BETWEEN_CALLS = 3
+# Warn if OpenCV never gets a frame (rpicam can work while cv2.read() does not).
+_FRAME_FAIL_WARN_SEC = 15
 
 # Initialize Local TTS (Optimized for Pi/Linux)
 try:
@@ -49,36 +52,85 @@ def speak(text):
         engine.say(text)
         engine.runAndWait()
 
+
+def _open_cv_capture():
+    """OpenCV + Pi Camera: prefer V4L2; probe until we get a real frame."""
+    v4l2 = getattr(cv2, "CAP_V4L2", None)
+
+    def try_open(idx, api):
+        cap_local = (
+            cv2.VideoCapture(idx, api)
+            if api is not None
+            else cv2.VideoCapture(idx)
+        )
+        if not cap_local.isOpened():
+            cap_local.release()
+            return None
+        cap_local.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap_local.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        ret, frm = cap_local.read()
+        if ret and frm is not None and frm.size > 0:
+            return cap_local
+        cap_local.release()
+        return None
+
+    for idx in CAMERA_INDICES:
+        if v4l2 is not None:
+            cap = try_open(idx, v4l2)
+            if cap is not None:
+                print(f"✅ Camera OK via V4L2, index {idx}.", flush=True)
+                return cap
+        cap = try_open(idx, None)
+        if cap is not None:
+            print(f"✅ Camera OK (default backend), index {idx}.", flush=True)
+            return cap
+
+    print(
+        "❌ OpenCV could not capture frames from indices "
+        f"{CAMERA_INDICES}. rpicam-hello may still work — install "
+        "`sudo apt install v4l-utils` and run `v4l2-ctl --list-devices`, "
+        "then set CAMERA_INDICES to match /dev/videoN.",
+        flush=True,
+    )
+    return None
+
+
 def run_detector():
-    # Use headless-friendly capture
-    cap = cv2.VideoCapture(CAMERA_INDEX)
-    
-    # Pi 3 optimization: Use 640x480 resolution
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap = _open_cv_capture()
+    if cap is None:
+        return
 
     # Starting mode (Match the Radio options in demo.py)
-    current_mode = "Object Detection" 
-
-    if not cap.isOpened():
-        print("❌ Error: Camera not found.")
-        return
+    current_mode = "Object Detection"
 
     print(f"🚀 Pi BlindAid Active in {current_mode} mode.")
     print("Hold an object to hear distance, or trigger OCR via API if needed.")
-    print("(No camera window — headless mode. First API call can take several minutes.)\n")
+    print("(No camera window — headless mode. First API call can take several minutes.)")
+    print(
+        "Network: if `curl` to the Space URL shows 000, fix Wi‑Fi/Ethernet/DNS — "
+        "API calls will fail or hang.\n",
+        flush=True,
+    )
 
     try:
-        first_frame = True
+        fail_started = None
         while True:
             ret, frame = cap.read()
             if not ret:
+                now = time.monotonic()
+                if fail_started is None:
+                    fail_started = now
+                elif now - fail_started >= _FRAME_FAIL_WARN_SEC:
+                    print(
+                        "⚠️ OpenCV is not receiving frames (another app may be "
+                        "using the camera). Close rpicam/other capture and retry.",
+                        flush=True,
+                    )
+                    fail_started = now
                 time.sleep(1)
                 continue
 
-            if first_frame:
-                print("✅ Camera is delivering frames.", flush=True)
-                first_frame = False
+            fail_started = None
 
             # Save frame to temp file with compression to save bandwidth
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
